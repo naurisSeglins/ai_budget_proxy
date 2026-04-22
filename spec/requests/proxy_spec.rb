@@ -16,50 +16,55 @@ RSpec.describe ProxyController, type: :request do
         max_tokens: 500
       }
     end
+    let(:openai_endpoint) { "https://api.openai.com/v1/chat/completions" }
 
-    context "when a valid OpenAI-shaped request is proxied" do
-      let(:expected_response) do
+    before { allow(OpenAiClient).to receive(:default_api_key).and_return("test-api-key") }
+
+    context "when OpenAI returns a successful response" do
+      let(:openai_response) do
         {
-          status: "ok",
-          message: "proxy is running",
-          request: {
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: "You are a code review assistant." },
-              { role: "user", content: "Review this Ruby method for performance issues." }
-            ],
-            temperature: 0.7,
-            max_tokens: 500
-          }
+          id: "chatcmpl-123",
+          choices: [{ message: { role: "assistant", content: "Looks good." } }],
+          usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 }
         }
       end
 
-      it "responds with 200 and echoes the proxied request back as JSON" do
+      before do
+        stub_request(:post, openai_endpoint)
+          .to_return(
+            status: 200,
+            body: openai_response.to_json,
+            headers: { "Content-Type" => "application/json" }
+          )
+      end
+
+      it "forwards the request body to OpenAI" do
+        make_request
+
+        expect(WebMock).to have_requested(:post, openai_endpoint)
+          .with(body: hash_including("model" => "gpt-4o-mini"))
+      end
+
+      it "returns 200 with the OpenAI response body" do
         make_request
 
         expect(response).to have_http_status(:ok)
         expect(response.content_type).to include("application/json")
-        expect(response_json).to eq(expected_response)
+        expect(response_json).to eq(openai_response)
       end
     end
 
-    context "when the request body is empty" do
-      let(:params) { {} }
-
-      let(:expected_response) do
-        {
-          status: "ok",
-          message: "proxy is running",
-          request: {}
-        }
+    context "when OpenAI returns an error" do
+      before do
+        stub_request(:post, openai_endpoint)
+          .to_return(status: 500, body: { error: "upstream boom" }.to_json)
       end
 
-      it "responds with 200 and an empty request echo" do
+      it "returns 502 with a formatted error body" do
         make_request
 
-        expect(response).to have_http_status(:ok)
-        expect(response.content_type).to include("application/json")
-        expect(response_json).to eq(expected_response)
+        expect(response).to have_http_status(:bad_gateway)
+        expect(response_json[:errors].first[:status]).to eq(502)
       end
     end
   end

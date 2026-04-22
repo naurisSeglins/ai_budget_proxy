@@ -1,10 +1,11 @@
 class ProxyController < ApplicationController
   def create
-    render json: {
-      status: "ok",
-      message: "proxy is running",
-      request: proxy_params
-    }
+    render json: OpenAiClient.new.chat_completion(proxy_params)
+  rescue OpenAiClient::Error => e
+    render(
+      json: { errors: [{ status: 502, detail: e.message }] },
+      status: :bad_gateway
+    )
   end
 
   private
