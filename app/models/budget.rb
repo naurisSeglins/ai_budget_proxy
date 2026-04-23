@@ -9,4 +9,10 @@ class Budget < ApplicationRecord
   def remaining_cents
     limit_cents - usage_cents
   end
+
+  def record_usage!(cents)
+    self.class.update_counters(id, usage_cents: cents)
+    self.usage_cents += cents
+    self
+  end
 end
