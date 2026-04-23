@@ -24,6 +24,7 @@ RSpec.describe ProxyController, type: :request do
       let(:openai_response) do
         {
           id: "chatcmpl-123",
+          model: "gpt-4o-mini-2024-07-18",
           choices: [{ message: { role: "assistant", content: "Looks good." } }],
           usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 }
         }
@@ -52,6 +53,12 @@ RSpec.describe ProxyController, type: :request do
         expect(response.content_type).to include("application/json")
         expect(response_json).to eq(openai_response)
       end
+
+      it "increments the budget's usage_cents" do
+        budget = create(:budget, limit_cents: 1000, usage_cents: 0)
+
+        expect { make_request }.to change { budget.reload.usage_cents }.from(0)
+      end
     end
 
     context "when OpenAI returns an error" do
@@ -65,6 +72,12 @@ RSpec.describe ProxyController, type: :request do
 
         expect(response).to have_http_status(:bad_gateway)
         expect(response_json[:errors].first[:status]).to eq(502)
+      end
+
+      it "does not increment the budget's usage_cents" do
+        budget = create(:budget, limit_cents: 1000, usage_cents: 0)
+
+        expect { make_request }.not_to change { budget.reload.usage_cents }
       end
     end
   end

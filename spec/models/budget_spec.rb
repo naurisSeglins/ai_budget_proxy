@@ -35,4 +35,22 @@ RSpec.describe Budget, type: :model do
       expect(budget.remaining_cents).to eq(0)
     end
   end
+
+  describe "#record_usage!" do
+    it "persists an incremented usage_cents" do
+      budget = create(:budget, limit_cents: 1000, usage_cents: 100)
+
+      budget.record_usage!(50)
+
+      expect(budget.reload.usage_cents).to eq(150)
+    end
+
+    it "updates usage_cents on the receiver in memory" do
+      budget = create(:budget, limit_cents: 1000, usage_cents: 100)
+
+      budget.record_usage!(50)
+
+      expect(budget.usage_cents).to eq(150)
+    end
+  end
 end
