@@ -1,16 +1,28 @@
 class ProxyController < ApplicationController
+  before_action :enforce_budget
+
   def create
     openai_response = OpenAiClient.new.chat_completion(proxy_params)
     record_usage(openai_response)
     render json: openai_response
   rescue OpenAiClient::Error => e
     render(
-      json: { errors: [{ status: 502, detail: e.message }] },
+      json: { errors: [ { status: 502, detail: e.message } ] },
       status: :bad_gateway
     )
   end
 
   private
+
+  def enforce_budget
+    budget = Budget.first
+    return if budget && !budget.exceeded?
+
+    render(
+      json: { errors: [ { status: 429, detail: "Budget exceeded" } ] },
+      status: :too_many_requests
+    )
+  end
 
   def record_usage(openai_response)
     cost = CostCalculator.new(openai_response).cents
