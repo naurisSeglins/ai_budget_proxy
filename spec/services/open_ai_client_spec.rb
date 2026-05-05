@@ -7,7 +7,7 @@ RSpec.describe OpenAiClient do
   let(:payload) do
     {
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: "hello" }]
+      messages: [ { role: "user", content: "hello" } ]
     }
   end
 
@@ -16,7 +16,7 @@ RSpec.describe OpenAiClient do
       let(:openai_response) do
         {
           id: "chatcmpl-123",
-          choices: [{ message: { role: "assistant", content: "hi there" } }],
+          choices: [ { message: { role: "assistant", content: "hi there" } } ],
           usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
         }
       end
@@ -68,12 +68,16 @@ RSpec.describe OpenAiClient do
   end
 
   describe "API key resolution" do
-    it "raises MissingApiKeyError when no key is configured" do
-      allow(Rails.application.credentials).to receive(:dig).with(:openai, :api_key).and_return(nil)
-      allow(ENV).to receive(:[]).and_call_original
-      allow(ENV).to receive(:[]).with("OPENAI_API_KEY").and_return(nil)
+    it "raises ArgumentError when api_key is not provided" do
+      expect { described_class.new }.to raise_error(ArgumentError)
+    end
 
-      expect { described_class.new }.to raise_error(OpenAiClient::MissingApiKeyError)
+    it "raises MissingApiKeyError when api_key is nil" do
+      expect { described_class.new(api_key: nil) }.to raise_error(OpenAiClient::MissingApiKeyError)
+    end
+
+    it "raises MissingApiKeyError when api_key is blank" do
+      expect { described_class.new(api_key: "") }.to raise_error(OpenAiClient::MissingApiKeyError)
     end
   end
 end

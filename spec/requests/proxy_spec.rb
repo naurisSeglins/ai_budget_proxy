@@ -4,7 +4,13 @@ RSpec.describe ProxyController, type: :request do
   describe "POST #create /proxy" do
     subject(:make_request) { post "/proxy", headers: headers, params: params, as: :json }
 
-    let(:headers) { { "Accept" => "application/json" } }
+    let(:provider_api_key) { "Bearer sk-test-provider-key" }
+    let(:headers) do
+      {
+        "Accept" => "application/json",
+        "X-Provider-Authorization" => provider_api_key
+      }
+    end
     let(:params) do
       {
         model: "gpt-4o-mini",
@@ -26,8 +32,6 @@ RSpec.describe ProxyController, type: :request do
       }
     end
 
-    before { allow(OpenAiClient).to receive(:default_api_key).and_return("test-api-key") }
-
     context "when the budget has remaining capacity" do
       let!(:budget) { create(:budget, :with_remaining) }
 
@@ -46,6 +50,13 @@ RSpec.describe ProxyController, type: :request do
 
           expect(WebMock).to have_requested(:post, openai_endpoint)
             .with(body: hash_including("model" => "gpt-4o-mini"))
+        end
+
+        it "forwards the caller's credential as Authorization to OpenAI" do
+          make_request
+
+          expect(WebMock).to have_requested(:post, openai_endpoint)
+            .with(headers: { "Authorization" => "Bearer sk-test-provider-key" })
         end
 
         it "returns 200 with the OpenAI response body" do
@@ -132,6 +143,66 @@ RSpec.describe ProxyController, type: :request do
 
         expect(response).to have_http_status(:too_many_requests)
         expect(response_json).to eq(errors: [ { status: 429, detail: "Budget exceeded" } ])
+      end
+
+      it "does not forward the request to OpenAI" do
+        make_request
+
+        expect(WebMock).not_to have_requested(:post, openai_endpoint)
+      end
+    end
+
+    context "when X-Provider-Authorization header is missing" do
+      let(:headers) { { "Accept" => "application/json" } }
+
+      context "with a budget that has remaining capacity" do
+        before { create(:budget, :with_remaining) }
+
+        it "returns 401 with a missing-header error body" do
+          make_request
+
+          expect(response).to have_http_status(:unauthorized)
+          expect(response.content_type).to include("application/json")
+          expect(response_json).to eq(
+            errors: [ { status: 401, detail: "Missing X-Provider-Authorization header" } ]
+          )
+        end
+
+        it "does not forward the request to OpenAI" do
+          make_request
+
+          expect(WebMock).not_to have_requested(:post, openai_endpoint)
+        end
+      end
+
+      context "with the budget also exceeded" do
+        before { create(:budget, :exceeded) }
+
+        it "returns 401 (auth check runs before budget check)" do
+          make_request
+
+          expect(response).to have_http_status(:unauthorized)
+        end
+      end
+    end
+
+    context "when only Authorization header is supplied (no X-Provider-Authorization fallback)" do
+      let(:headers) do
+        {
+          "Accept" => "application/json",
+          "Authorization" => "Bearer sk-test-provider-key"
+        }
+      end
+
+      before { create(:budget, :with_remaining) }
+
+      it "returns 401 — Authorization is reserved for proxy auth, not the upstream credential" do
+        make_request
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response_json).to eq(
+          errors: [ { status: 401, detail: "Missing X-Provider-Authorization header" } ]
+        )
       end
 
       it "does not forward the request to OpenAI" do
