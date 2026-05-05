@@ -1,4 +1,6 @@
-class Budget < ApplicationRecord
+class ProxyToken < ApplicationRecord
+  validates :token, presence: true, uniqueness: true
+  validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :limit_cents, presence: true, numericality: { only_integer: true, greater_than: 0 }
   validates :usage_cents, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 

@@ -6,4 +6,6 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   post "proxy", to: "proxy#create"
+  post "tokens", to: "tokens#create"
+  get  "tokens", to: "tokens#index"
 end
