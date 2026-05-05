@@ -4,10 +4,12 @@ RSpec.describe ProxyController, type: :request do
   describe "POST #create /proxy" do
     subject(:make_request) { post "/proxy", headers: headers, params: params, as: :json }
 
+    let!(:proxy_token) { create(:proxy_token) }
     let(:provider_api_key) { "Bearer sk-test-provider-key" }
     let(:headers) do
       {
         "Accept" => "application/json",
+        "Authorization" => "Bearer #{proxy_token.token}",
         "X-Provider-Authorization" => provider_api_key
       }
     end
@@ -32,44 +34,128 @@ RSpec.describe ProxyController, type: :request do
       }
     end
 
-    context "when the budget has remaining capacity" do
-      let!(:budget) { create(:budget, :with_remaining) }
+    context "when the proxy token is missing" do
+      let(:headers) do
+        {
+          "Accept" => "application/json",
+          "X-Provider-Authorization" => provider_api_key
+        }
+      end
 
-      context "when OpenAI returns a successful response" do
-        before do
-          stub_request(:post, openai_endpoint)
-            .to_return(
-              status: 200,
-              body: openai_response.to_json,
-              headers: { "Content-Type" => "application/json" }
-            )
-        end
+      it "returns 401 with an unauthorized error body" do
+        make_request
 
-        it "forwards the request body to OpenAI" do
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.content_type).to include("application/json")
+        expect(response_json).to eq(errors: [ { status: 401, detail: "Unauthorized" } ])
+      end
+
+      it "does not forward the request to OpenAI" do
+        make_request
+
+        expect(WebMock).not_to have_requested(:post, openai_endpoint)
+      end
+    end
+
+    context "when the proxy token is unknown" do
+      let(:headers) do
+        {
+          "Accept" => "application/json",
+          "Authorization" => "Bearer unknown-token",
+          "X-Provider-Authorization" => provider_api_key
+        }
+      end
+
+      it "returns 401" do
+        make_request
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response_json).to eq(errors: [ { status: 401, detail: "Unauthorized" } ])
+      end
+
+      it "does not forward the request to OpenAI" do
+        make_request
+
+        expect(WebMock).not_to have_requested(:post, openai_endpoint)
+      end
+    end
+
+    context "when the proxy token is revoked" do
+      let!(:proxy_token) { create(:proxy_token, :revoked) }
+
+      it "returns 401" do
+        make_request
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response_json).to eq(errors: [ { status: 401, detail: "Unauthorized" } ])
+      end
+
+      it "does not forward the request to OpenAI" do
+        make_request
+
+        expect(WebMock).not_to have_requested(:post, openai_endpoint)
+      end
+
+      context "when the budget is also exceeded" do
+        let!(:proxy_token) { create(:proxy_token, :revoked, :exceeded) }
+
+        it "returns 401 (proxy auth runs before budget check)" do
           make_request
 
-          expect(WebMock).to have_requested(:post, openai_endpoint)
-            .with(body: hash_including("model" => "gpt-4o-mini"))
+          expect(response).to have_http_status(:unauthorized)
+        end
+      end
+
+      context "when X-Provider-Authorization is also missing" do
+        let(:headers) do
+          {
+            "Accept" => "application/json",
+            "Authorization" => "Bearer #{proxy_token.token}"
+          }
         end
 
-        it "forwards the caller's credential as Authorization to OpenAI" do
+        it "returns 401 (proxy auth runs before credential check)" do
           make_request
 
-          expect(WebMock).to have_requested(:post, openai_endpoint)
-            .with(headers: { "Authorization" => "Bearer sk-test-provider-key" })
+          expect(response).to have_http_status(:unauthorized)
         end
+      end
+    end
 
-        it "returns 200 with the OpenAI response body" do
-          make_request
+    context "when the token has remaining budget" do
+      before do
+        stub_request(:post, openai_endpoint)
+          .to_return(
+            status: 200,
+            body: openai_response.to_json,
+            headers: { "Content-Type" => "application/json" }
+          )
+      end
 
-          expect(response).to have_http_status(:ok)
-          expect(response.content_type).to include("application/json")
-          expect(response_json).to eq(openai_response)
-        end
+      it "forwards the request body to OpenAI" do
+        make_request
 
-        it "increments the budget's usage_cents" do
-          expect { make_request }.to change { budget.reload.usage_cents }
-        end
+        expect(WebMock).to have_requested(:post, openai_endpoint)
+          .with(body: hash_including("model" => "gpt-4o-mini"))
+      end
+
+      it "forwards the caller's credential as Authorization to OpenAI" do
+        make_request
+
+        expect(WebMock).to have_requested(:post, openai_endpoint)
+          .with(headers: { "Authorization" => "Bearer sk-test-provider-key" })
+      end
+
+      it "returns 200 with the OpenAI response body" do
+        make_request
+
+        expect(response).to have_http_status(:ok)
+        expect(response.content_type).to include("application/json")
+        expect(response_json).to eq(openai_response)
+      end
+
+      it "increments the token's usage_cents" do
+        expect { make_request }.to change { proxy_token.reload.usage_cents }
       end
 
       context "when OpenAI returns an error" do
@@ -85,14 +171,14 @@ RSpec.describe ProxyController, type: :request do
           expect(response_json[:errors].first[:status]).to eq(502)
         end
 
-        it "does not increment the budget's usage_cents" do
-          expect { make_request }.not_to change { budget.reload.usage_cents }
+        it "does not increment the token's usage_cents" do
+          expect { make_request }.not_to change { proxy_token.reload.usage_cents }
         end
       end
     end
 
-    context "when the budget is exceeded" do
-      before { create(:budget, limit_cents: 1000, usage_cents: 1500) }
+    context "when the token budget is exceeded" do
+      let!(:proxy_token) { create(:proxy_token, :exceeded) }
 
       it "returns 429 with a budget exceeded error body" do
         make_request
@@ -109,8 +195,8 @@ RSpec.describe ProxyController, type: :request do
       end
     end
 
-    context "when the budget is exactly at the limit" do
-      before { create(:budget, limit_cents: 1000, usage_cents: 1000) }
+    context "when the token budget is exactly at the limit" do
+      let!(:proxy_token) { create(:proxy_token, limit_cents: 1000, usage_cents: 1000) }
 
       it "returns 429" do
         make_request
@@ -119,9 +205,10 @@ RSpec.describe ProxyController, type: :request do
       end
     end
 
-    context "when the budget is one cent under the limit" do
+    context "when the token budget is one cent under the limit" do
+      let!(:proxy_token) { create(:proxy_token, limit_cents: 1000, usage_cents: 999) }
+
       before do
-        create(:budget, limit_cents: 1000, usage_cents: 999)
         stub_request(:post, openai_endpoint)
           .to_return(
             status: 200,
@@ -137,12 +224,22 @@ RSpec.describe ProxyController, type: :request do
       end
     end
 
-    context "when no budget is configured" do
-      it "returns 429 with a budget exceeded error body" do
+    context "when X-Provider-Authorization header is missing" do
+      let(:headers) do
+        {
+          "Accept" => "application/json",
+          "Authorization" => "Bearer #{proxy_token.token}"
+        }
+      end
+
+      it "returns 401 with a missing-header error body" do
         make_request
 
-        expect(response).to have_http_status(:too_many_requests)
-        expect(response_json).to eq(errors: [ { status: 429, detail: "Budget exceeded" } ])
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.content_type).to include("application/json")
+        expect(response_json).to eq(
+          errors: [ { status: 401, detail: "Missing X-Provider-Authorization header" } ]
+        )
       end
 
       it "does not forward the request to OpenAI" do
@@ -150,35 +247,11 @@ RSpec.describe ProxyController, type: :request do
 
         expect(WebMock).not_to have_requested(:post, openai_endpoint)
       end
-    end
 
-    context "when X-Provider-Authorization header is missing" do
-      let(:headers) { { "Accept" => "application/json" } }
+      context "when the budget is also exceeded" do
+        let!(:proxy_token) { create(:proxy_token, :exceeded) }
 
-      context "with a budget that has remaining capacity" do
-        before { create(:budget, :with_remaining) }
-
-        it "returns 401 with a missing-header error body" do
-          make_request
-
-          expect(response).to have_http_status(:unauthorized)
-          expect(response.content_type).to include("application/json")
-          expect(response_json).to eq(
-            errors: [ { status: 401, detail: "Missing X-Provider-Authorization header" } ]
-          )
-        end
-
-        it "does not forward the request to OpenAI" do
-          make_request
-
-          expect(WebMock).not_to have_requested(:post, openai_endpoint)
-        end
-      end
-
-      context "with the budget also exceeded" do
-        before { create(:budget, :exceeded) }
-
-        it "returns 401 (auth check runs before budget check)" do
+        it "returns 401 (credential check runs before budget check)" do
           make_request
 
           expect(response).to have_http_status(:unauthorized)
@@ -186,7 +259,7 @@ RSpec.describe ProxyController, type: :request do
       end
     end
 
-    context "when only Authorization header is supplied (no X-Provider-Authorization fallback)" do
+    context "when Authorization contains an OpenAI key instead of a proxy token" do
       let(:headers) do
         {
           "Accept" => "application/json",
@@ -194,15 +267,11 @@ RSpec.describe ProxyController, type: :request do
         }
       end
 
-      before { create(:budget, :with_remaining) }
-
-      it "returns 401 — Authorization is reserved for proxy auth, not the upstream credential" do
+      it "returns 401 — Authorization is for proxy auth, not the upstream credential" do
         make_request
 
         expect(response).to have_http_status(:unauthorized)
-        expect(response_json).to eq(
-          errors: [ { status: 401, detail: "Missing X-Provider-Authorization header" } ]
-        )
+        expect(response_json).to eq(errors: [ { status: 401, detail: "Unauthorized" } ])
       end
 
       it "does not forward the request to OpenAI" do

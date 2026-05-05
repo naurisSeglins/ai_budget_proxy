@@ -25,8 +25,7 @@ class ProxyController < ApplicationController
   end
 
   def enforce_budget
-    budget = Budget.first
-    return if budget && !budget.exceeded?
+    return unless @current_token.exceeded?
 
     render(
       json: { errors: [ { status: 429, detail: "Budget exceeded" } ] },
@@ -49,7 +48,7 @@ class ProxyController < ApplicationController
     cost = CostCalculator.new(openai_response).cents
     return if cost.zero?
 
-    Budget.first&.record_usage!(cost)
+    @current_token.record_usage!(cost)
   rescue StandardError => e
     Rails.logger.error("Failed to record budget usage: #{e.class}: #{e.message}")
   end
