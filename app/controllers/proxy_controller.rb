@@ -1,8 +1,9 @@
 class ProxyController < ApplicationController
+  before_action :require_provider_credential
   before_action :enforce_budget
 
   def create
-    openai_response = OpenAiClient.new.chat_completion(proxy_params)
+    openai_response = OpenAiClient.new(api_key: provider_api_key).chat_completion(proxy_params)
     record_usage(openai_response)
     render json: openai_response
   rescue OpenAiClient::Error => e
@@ -14,6 +15,15 @@ class ProxyController < ApplicationController
 
   private
 
+  def require_provider_credential
+    return if provider_api_key.present?
+
+    render(
+      json: { errors: [ { status: 401, detail: "Missing X-Provider-Authorization header" } ] },
+      status: :unauthorized
+    )
+  end
+
   def enforce_budget
     budget = Budget.first
     return if budget && !budget.exceeded?
@@ -22,6 +32,17 @@ class ProxyController < ApplicationController
       json: { errors: [ { status: 429, detail: "Budget exceeded" } ] },
       status: :too_many_requests
     )
+  end
+
+  def provider_api_key
+    @provider_api_key ||= extract_provider_api_key
+  end
+
+  def extract_provider_api_key
+    raw = request.headers["X-Provider-Authorization"]
+    return nil if raw.blank?
+
+    raw.sub(/\ABearer\s+/i, "")
   end
 
   def record_usage(openai_response)

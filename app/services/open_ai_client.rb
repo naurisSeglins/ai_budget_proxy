@@ -5,7 +5,7 @@ class OpenAiClient
   ENDPOINT = "https://api.openai.com/v1/chat/completions".freeze
   TIMEOUT_SECONDS = 30
 
-  def initialize(api_key: self.class.default_api_key)
+  def initialize(api_key:)
     raise MissingApiKeyError, "OpenAI API key is not configured" if api_key.blank?
 
     @api_key = api_key
@@ -16,10 +16,6 @@ class OpenAiClient
     raise Error, "OpenAI returned #{response.status}: #{response.body}" unless response.success?
 
     JSON.parse(response.body)
-  end
-
-  def self.default_api_key
-    Rails.application.credentials.dig(:openai, :api_key) || ENV["OPENAI_API_KEY"]
   end
 
   private
