@@ -38,6 +38,9 @@ gem "image_processing", "~> 1.2"
 # HTTP client for upstream API calls (OpenAI, etc.)
 gem "faraday"
 
+# Throttle abusive requests at the Rack layer
+gem "rack-attack", "~> 6.8"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
@@ -55,4 +58,7 @@ group :development, :test do
   gem "factory_bot_rails"
   gem "shoulda-matchers"
   gem "webmock"
+
+  # Temporarily set ENV vars inside a block; restored automatically. Used for ENV-driven specs.
+  gem "climate_control"
 end
