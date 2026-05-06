@@ -85,5 +85,16 @@ test:
 # for a full overview on how database connection configuration can be specified.
 #
 production:
-  <<: *default
-  url: <%= ENV["DATABASE_URL"] %>
+  primary: &primary_production
+    <<: *default
+    url: <%= ENV["DATABASE_URL"] %>
+  # The solid_cache, solid_queue, and solid_cable gems eagerly load their
+  # ActiveRecord models on boot, and those models call
+  # `connects_to(database: { writing: :cache })` (etc) regardless of whether
+  # they are the active backend. Point all three at the primary Postgres so
+  # the connects_to calls resolve. We don't actually use them
+  # (cache_store = :memory_store, queue_adapter = :async, cable adapter
+  # = :async). Give each its own database when we add multi-VM scale.
+  cache: *primary_production
+  queue: *primary_production
+  cable: *primary_production
