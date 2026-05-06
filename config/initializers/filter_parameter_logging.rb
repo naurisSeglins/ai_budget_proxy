@@ -4,5 +4,10 @@
 # Use this to limit dissemination of sensitive information.
 # See the ActiveSupport::ParameterFilter documentation for supported notations and behaviors.
 Rails.application.config.filter_parameters += [
-  :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc
+  # Standard sensitive fields
+  :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
+  # AI request body — prompt content. OpenAI uses :messages and (legacy) :prompt;
+  # other providers use :input or :content. Filtering all four covers current
+  # and likely-future provider shapes so user prompts never land in logs.
+  :messages, :prompt, :input, :content
 ]
