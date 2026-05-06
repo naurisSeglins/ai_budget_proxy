@@ -9,6 +9,13 @@ console_command = '/rails/bin/rails console'
 
 [build]
 
+# Thrust (Rails 8's default HTTP front-end via bin/thrust) listens on port 80 by
+# default. Containers run as the non-root 'rails' user (UID 1000), which cannot
+# bind to ports < 1024 on Linux. Tell Thrust to listen on 8080 to match Fly's
+# expected internal_port. Thrust still proxies to Rails on the default PORT (3000).
+[env]
+  HTTP_PORT = "8080"
+
 [http_service]
   internal_port = 8080
   force_https = true
