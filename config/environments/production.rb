@@ -46,12 +46,14 @@ Rails.application.configure do
   # Don't log any deprecations.
   config.active_support.report_deprecations = false
 
-  # Replace the default in-process memory cache store with a durable alternative.
-  config.cache_store = :solid_cache_store
+  # Single-VM launch: in-process memory cache is sufficient. Rack::Attack throttle
+  # windows are 60s, so cache eviction on restart is not a concern at this scale.
+  # Switch to :solid_cache_store (with a dedicated cache database) when scaling out.
+  config.cache_store = :memory_store
 
-  # Replace the default in-process and non-durable queuing backend for Active Job.
-  config.active_job.queue_adapter = :solid_queue
-  config.solid_queue.connects_to = { database: { writing: :queue } }
+  # No background jobs at launch. :async runs jobs in-process; if we add jobs later
+  # we'll switch to :solid_queue with a dedicated queue database.
+  config.active_job.queue_adapter = :async
 
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
