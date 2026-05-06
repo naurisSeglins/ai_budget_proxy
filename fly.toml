@@ -21,7 +21,11 @@ console_command = '/rails/bin/rails console'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  # Keep at least one machine running so the first request after idle time
+  # doesn't hit a Thrust→Rails cold-start race (Thrust binds :8080 in <1s,
+  # Rails needs ~15s to be ready on :3000; requests in that window get 502).
+  # Costs ~$2/month for one always-on shared-cpu-1x VM. Worth it.
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]
