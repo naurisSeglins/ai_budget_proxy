@@ -45,7 +45,7 @@ class ProxyController < ApplicationController
   end
 
   def record_usage(openai_response)
-    cost = CostCalculator.new(openai_response).cents
+    cost = CostCalculator.new(openai_response).millicents
     return if cost.zero?
 
     @current_token.record_usage!(cost)
