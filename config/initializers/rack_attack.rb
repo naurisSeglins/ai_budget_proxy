@@ -1,14 +1,19 @@
-# Throttle abusive requests to /proxy at the Rack layer.
+# Throttle abusive requests at the Rack layer.
 #
-# Two throttles run on every POST /proxy:
+# /proxy throttles (POST only):
 #   - per-token (key = the proxy token in the Authorization header)
-#   - per-IP    (key = remote IP, secondary safety net for misbehaving clients)
+#   - per-IP    (secondary safety net for misbehaving clients)
+#
+# /tokens throttles:
+#   - POST per-IP (registration spam prevention, hourly window)
+#   - GET  per-IP (email enumeration / log-flood prevention, hourly window)
 #
 # Limits are read from ENV per request so they can be tuned in production
 # without redeploying and stubbed in specs without touching the gem internals.
 
 class Rack::Attack
   PROXY_PATH = "/proxy".freeze
+  TOKENS_PATH = "/tokens".freeze
 
   # Tests run with Rails.cache = :null_store, which silently drops throttle
   # counters. Use a dedicated MemoryStore for rack-attack in test so throttles
@@ -29,6 +34,18 @@ class Rack::Attack
     limit: ->(_req) { ENV.fetch("RATE_LIMIT_PER_IP_RPM", "120").to_i },
     period: 60.seconds) do |req|
     req.ip if req.path == PROXY_PATH && req.post?
+  end
+
+  throttle("tokens/post_per_ip",
+    limit: ->(_req) { ENV.fetch("RATE_LIMIT_TOKENS_PER_IP_HOUR", "10").to_i },
+    period: 1.hour) do |req|
+    req.ip if req.path == TOKENS_PATH && req.post?
+  end
+
+  throttle("tokens/get_per_ip",
+    limit: ->(_req) { ENV.fetch("RATE_LIMIT_TOKENS_GET_PER_IP_HOUR", "60").to_i },
+    period: 1.hour) do |req|
+    req.ip if req.path == TOKENS_PATH && req.get?
   end
 
   # Project-standard error shape, plus a Retry-After header (seconds until the

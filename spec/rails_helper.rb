@@ -61,6 +61,8 @@ RSpec.configure do |config|
 
   config.include FactoryBot::Syntax::Methods
 
+  config.before(:each) { Rack::Attack.cache.store.clear }
+
   config.filter_rails_from_backtrace!
 end
 

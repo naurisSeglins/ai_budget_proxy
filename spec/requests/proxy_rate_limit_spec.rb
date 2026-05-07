@@ -21,7 +21,6 @@ RSpec.describe "Rate limiting on POST /proxy", type: :request do
   end
 
   before do
-    Rack::Attack.cache.store.clear
     stub_request(:post, openai_endpoint).to_return(
       status: 200,
       body: openai_response.to_json,
