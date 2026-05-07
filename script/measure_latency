@@ -1,0 +1,151 @@
+#!/usr/bin/env ruby
+# Measures proxy overhead against the deployed ai_budget proxy.
+#
+# For each request the script records:
+#   - total_ms  : round-trip from request sent to response received
+#   - openai_ms : OpenAI's own processing time (from the openai-processing-ms
+#                 response header, when the proxy forwards it)
+#   - overhead_ms: total_ms - openai_ms  (pure proxy cost)
+#
+# When openai-processing-ms is absent the script falls back to reporting
+# total_ms only and notes that it cannot isolate proxy overhead.
+#
+# Usage:
+#   PROXY_URL=https://ai-budget-proxy.fly.dev \
+#   PROXY_TOKEN=<your-proxy-token> \
+#   OPENAI_KEY=sk-... \
+#   ruby script/measure_latency
+#
+# Optional env vars:
+#   N=200          number of requests (default 200)
+#   CONCURRENCY=1  parallel workers   (default 1, sequential)
+#   MODEL=gpt-4o-mini (default)
+#
+# Budget note: N requests with a short prompt cost roughly $0.0003 per request
+# at gpt-4o-mini rates. 200 requests ≈ $0.06. Ensure the proxy token has at
+# least $0.10 of remaining budget before running.
+
+require "net/http"
+require "json"
+require "uri"
+
+PROXY_URL   = ENV.fetch("PROXY_URL",   "https://ai-budget-proxy.fly.dev")
+PROXY_TOKEN = ENV.fetch("PROXY_TOKEN") { abort "Set PROXY_TOKEN" }
+OPENAI_KEY  = ENV.fetch("OPENAI_KEY")  { abort "Set OPENAI_KEY" }
+N           = ENV.fetch("N", "200").to_i
+CONCURRENCY = ENV.fetch("CONCURRENCY", "1").to_i
+MODEL       = ENV.fetch("MODEL", "gpt-4o-mini")
+
+PAYLOAD = JSON.generate(
+  model: MODEL,
+  messages: [ { role: "user", content: "Reply with one word." } ]
+)
+
+HEADERS = {
+  "Content-Type"          => "application/json",
+  "Authorization"         => "Bearer #{PROXY_TOKEN}",
+  "X-Provider-Authorization" => "Bearer #{OPENAI_KEY}"
+}.freeze
+
+def percentile(sorted_values, pct)
+  return 0 if sorted_values.empty?
+  idx = ((pct / 100.0) * (sorted_values.length - 1)).round
+  sorted_values[idx]
+end
+
+def send_request(uri)
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = (uri.scheme == "https")
+  http.read_timeout = 30
+
+  req = Net::HTTP::Post.new(uri.path, HEADERS)
+  req.body = PAYLOAD
+
+  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
+  res = http.request(req)
+  t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
+
+  total_ms  = t1 - t0
+  openai_ms = res["openai-processing-ms"]&.to_i
+
+  { total_ms: total_ms, openai_ms: openai_ms, status: res.code.to_i }
+end
+
+uri = URI.parse("#{PROXY_URL}/proxy")
+
+puts "ai_budget proxy latency measurement"
+puts "  target : #{PROXY_URL}/proxy"
+puts "  model  : #{MODEL}"
+puts "  N      : #{N} requests"
+puts "  workers: #{CONCURRENCY}"
+puts
+
+results = []
+mutex   = Mutex.new
+errors  = 0
+
+workers = Array.new(CONCURRENCY) do
+  Thread.new do
+    loop do
+      i = mutex.synchronize { results.length + errors }
+      break if i >= N
+
+      begin
+        r = send_request(uri)
+        mutex.synchronize do
+          if r[:status] == 200
+            results << r
+            print "." if (results.length % 10).zero?
+            $stdout.flush
+          else
+            errors += 1
+            print "E"
+            $stdout.flush
+          end
+        end
+      rescue => e
+        mutex.synchronize { errors += 1 }
+        print "X"
+        $stdout.flush
+      end
+    end
+  end
+end
+
+workers.each(&:join)
+puts "\n"
+
+if results.empty?
+  abort "All #{N} requests failed — check your token, key, and proxy URL."
+end
+
+totals   = results.map { |r| r[:total_ms] }.sort
+overhead = results.select { |r| r[:openai_ms] }.map { |r| r[:total_ms] - r[:openai_ms] }.sort
+
+puts "Results (#{results.length} successful, #{errors} errors)"
+puts "-" * 50
+
+puts "\nTotal round-trip (proxy + OpenAI)"
+puts "  p50  : #{percentile(totals, 50)} ms"
+puts "  p95  : #{percentile(totals, 95)} ms"
+puts "  min  : #{totals.first} ms"
+puts "  max  : #{totals.last} ms"
+puts "  mean : #{(totals.sum.to_f / totals.length).round} ms"
+
+if overhead.any?
+  puts "\nProxy overhead only (total minus openai-processing-ms)"
+  puts "  p50  : #{percentile(overhead, 50)} ms"
+  puts "  p95  : #{percentile(overhead, 95)} ms"
+  puts "  min  : #{overhead.first} ms"
+  puts "  max  : #{overhead.last} ms"
+  puts "  mean : #{(overhead.sum.to_f / overhead.length).round} ms"
+  puts "  (#{overhead.length}/#{results.length} responses included openai-processing-ms)"
+else
+  puts "\n(openai-processing-ms header not present in responses — overhead cannot be isolated)"
+end
+
+puts "\nSetup"
+puts "  date     : #{Time.now.strftime('%Y-%m-%d')}"
+puts "  model    : #{MODEL}"
+puts "  region   : #{PROXY_URL} (Fly.io ams)"
+puts "  payload  : single short message (\"Reply with one word.\")"

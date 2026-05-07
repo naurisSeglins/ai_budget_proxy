@@ -3,8 +3,8 @@ FactoryBot.define do
     sequence(:email) { |n| "user#{n}@example.com" }
     token { SecureRandom.hex(32) }
     label { nil }
-    limit_cents { 1000 }
-    usage_cents { 0 }
+    limit_millicents { 1_000_000 }  # $10
+    usage_millicents { 0 }
     revoked { false }
 
     trait :revoked do
@@ -12,13 +12,13 @@ FactoryBot.define do
     end
 
     trait :exceeded do
-      limit_cents { 1000 }
-      usage_cents { 1500 }
+      limit_millicents { 1_000_000 }
+      usage_millicents { 1_500_000 }
     end
 
     trait :with_remaining do
-      limit_cents { 1000 }
-      usage_cents { 500 }
+      limit_millicents { 1_000_000 }
+      usage_millicents { 500_000 }
     end
   end
 end

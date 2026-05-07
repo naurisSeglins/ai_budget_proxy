@@ -154,8 +154,8 @@ RSpec.describe ProxyController, type: :request do
         expect(response_json).to eq(openai_response)
       end
 
-      it "increments the token's usage_cents" do
-        expect { make_request }.to change { proxy_token.reload.usage_cents }
+      it "increments the token's usage_millicents" do
+        expect { make_request }.to change { proxy_token.reload.usage_millicents }
       end
 
       context "when OpenAI returns an error" do
@@ -171,8 +171,8 @@ RSpec.describe ProxyController, type: :request do
           expect(response_json[:errors].first[:status]).to eq(502)
         end
 
-        it "does not increment the token's usage_cents" do
-          expect { make_request }.not_to change { proxy_token.reload.usage_cents }
+        it "does not increment the token's usage_millicents" do
+          expect { make_request }.not_to change { proxy_token.reload.usage_millicents }
         end
       end
     end
@@ -196,7 +196,7 @@ RSpec.describe ProxyController, type: :request do
     end
 
     context "when the token budget is exactly at the limit" do
-      let!(:proxy_token) { create(:proxy_token, limit_cents: 1000, usage_cents: 1000) }
+      let!(:proxy_token) { create(:proxy_token, limit_millicents: 1_000_000, usage_millicents: 1_000_000) }
 
       it "returns 429" do
         make_request
@@ -206,7 +206,7 @@ RSpec.describe ProxyController, type: :request do
     end
 
     context "when the token budget is one cent under the limit" do
-      let!(:proxy_token) { create(:proxy_token, limit_cents: 1000, usage_cents: 999) }
+      let!(:proxy_token) { create(:proxy_token, limit_millicents: 1_000_000, usage_millicents: 999_999) }
 
       before do
         stub_request(:post, openai_endpoint)

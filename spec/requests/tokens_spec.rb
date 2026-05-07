@@ -31,7 +31,7 @@ RSpec.describe TokensController, type: :request do
 
         token = ProxyToken.last
         expect(token.email).to eq("alice@example.com")
-        expect(token.limit_cents).to eq(1000)
+        expect(token.limit_millicents).to eq(1_000_000)
       end
 
       context "when a label is also provided" do
@@ -47,10 +47,10 @@ RSpec.describe TokensController, type: :request do
       context "when limit is a decimal (e.g. 10.50)" do
         let(:params) { { email: "alice@example.com", limit: 10.50 } }
 
-        it "stores the correct cents value" do
+        it "stores the correct millicents value" do
           make_request
 
-          expect(ProxyToken.last.limit_cents).to eq(1050)
+          expect(ProxyToken.last.limit_millicents).to eq(1_050_000)
         end
       end
 
@@ -142,8 +142,8 @@ RSpec.describe TokensController, type: :request do
   end
 
   describe "GET #index /tokens?email=" do
-    let!(:token_one) { create(:proxy_token, email: "alice@example.com", label: "work", limit_cents: 1000, usage_cents: 250) }
-    let!(:token_two) { create(:proxy_token, email: "alice@example.com", label: "home", limit_cents: 500, usage_cents: 0) }
+    let!(:token_one) { create(:proxy_token, email: "alice@example.com", label: "work", limit_millicents: 1_000_000, usage_millicents: 250_000) }
+    let!(:token_two) { create(:proxy_token, email: "alice@example.com", label: "home", limit_millicents: 500_000, usage_millicents: 0) }
     let!(:other_token) { create(:proxy_token, email: "bob@example.com") }
 
     context "when email is provided" do

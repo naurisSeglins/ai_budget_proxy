@@ -1,19 +1,21 @@
 class CostCalculator
-  # Cents per 1,000,000 tokens (input, output)
+  # Milli-cents per 1,000,000 tokens (input, output).
+  # 1 milli-cent = 1/1000 cent = 1/100_000 dollar.
+  # gpt-4o-mini: $0.15/1M input = 15_000 mc/1M, $0.60/1M output = 60_000 mc/1M.
   PRICING = {
-    "gpt-4o-mini" => { input: 15, output: 60 }
+    "gpt-4o-mini" => { input: 15_000, output: 60_000 }
   }.freeze
 
   def initialize(response)
     @response = response
   end
 
-  def cents
+  def millicents
     return 0 if prompt_tokens.nil? || completion_tokens.nil?
     return 0 if pricing.nil?
 
-    micro_cents = prompt_tokens * pricing[:input] + completion_tokens * pricing[:output]
-    (micro_cents.to_f / 1_000_000).ceil
+    raw = prompt_tokens * pricing[:input] + completion_tokens * pricing[:output]
+    (raw.to_f / 1_000_000).ceil
   end
 
   private

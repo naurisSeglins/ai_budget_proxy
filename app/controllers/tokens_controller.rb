@@ -1,8 +1,8 @@
 class TokensController < PublicController
   def create
-    limit_cents = dollars_to_cents(params[:limit])
+    limit_millicents = dollars_to_millicents(params[:limit])
 
-    unless limit_cents
+    unless limit_millicents
       return render json: {
         errors: [ { status: 422, detail: "Limit must be a positive number in dollars (e.g. 10 for $10)", source: { pointer: "/limit" } } ]
       }, status: :unprocessable_entity
@@ -12,7 +12,7 @@ class TokensController < PublicController
       token: SecureRandom.hex(32),
       email: params[:email].presence,
       label: params[:label].presence,
-      limit_cents: limit_cents
+      limit_millicents: limit_millicents
     )
 
     if proxy_token.save
@@ -36,9 +36,9 @@ class TokensController < PublicController
     render json: tokens.map { |t|
       {
         label: t.label,
-        limit: cents_to_dollars(t.limit_cents),
-        usage: cents_to_dollars(t.usage_cents),
-        remaining: cents_to_dollars(t.remaining_cents),
+        limit: millicents_to_dollars(t.limit_millicents),
+        usage: millicents_to_dollars(t.usage_millicents),
+        remaining: millicents_to_dollars(t.remaining_millicents),
         revoked: t.revoked,
         created_at: t.created_at
       }
@@ -47,13 +47,13 @@ class TokensController < PublicController
 
   private
 
-  def dollars_to_cents(value)
+  def dollars_to_millicents(value)
     return nil if value.blank?
-    cents = (value.to_f * 100).round
-    cents > 0 ? cents : nil
+    millicents = (value.to_f * 100_000).round
+    millicents > 0 ? millicents : nil
   end
 
-  def cents_to_dollars(cents)
-    (cents / 100.0).round(2)
+  def millicents_to_dollars(millicents)
+    (millicents / 100_000.0).round(2)
   end
 end
