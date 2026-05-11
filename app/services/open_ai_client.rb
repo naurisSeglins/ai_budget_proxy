@@ -13,9 +13,15 @@ class OpenAiClient
 
   def chat_completion(payload)
     response = connection.post(ENDPOINT, payload.to_json, request_headers)
-    raise Error, "OpenAI returned #{response.status}: #{response.body}" unless response.success?
+    unless response.success?
+      Rails.logger.error("OpenAI returned #{response.status}")
+      raise Error, "OpenAI returned #{response.status}"
+    end
 
     JSON.parse(response.body)
+  rescue Faraday::Error => e
+    Rails.logger.error("OpenAI network error: #{e.class}")
+    raise Error, "OpenAI request failed: #{e.class}"
   end
 
   private

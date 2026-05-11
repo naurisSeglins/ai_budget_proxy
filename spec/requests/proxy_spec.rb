@@ -175,6 +175,23 @@ RSpec.describe ProxyController, type: :request do
           expect { make_request }.not_to change { proxy_token.reload.usage_millicents }
         end
       end
+
+      context "when the upstream SSL connection fails" do
+        before do
+          stub_request(:post, openai_endpoint).to_raise(Faraday::SSLError)
+        end
+
+        it "returns 502 not 500" do
+          make_request
+
+          expect(response).to have_http_status(:bad_gateway)
+          expect(response_json[:errors].first[:status]).to eq(502)
+        end
+
+        it "does not increment the token's usage_millicents" do
+          expect { make_request }.not_to change { proxy_token.reload.usage_millicents }
+        end
+      end
     end
 
     context "when the token budget is exceeded" do
