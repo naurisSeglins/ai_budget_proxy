@@ -1,9 +1,10 @@
 class ProxyController < ApplicationController
   before_action :require_provider_credential
   before_action :enforce_budget
+  before_action :parse_request_body
 
   def create
-    openai_response = OpenAiClient.new(api_key: provider_api_key).chat_completion(proxy_params)
+    openai_response = OpenAiClient.new(api_key: provider_api_key).chat_completion(@parsed_body)
     record_usage(openai_response)
     render json: openai_response
   rescue OpenAiClient::Error => e
@@ -25,11 +26,25 @@ class ProxyController < ApplicationController
   end
 
   def enforce_budget
-    return unless @current_token.exceeded?
+    # Row lock forces a fresh read and serializes the check across concurrent
+    # requests for the same token, preventing stale-read races.
+    exceeded = @current_token.with_lock { @current_token.exceeded? }
+
+    return unless exceeded
 
     render(
       json: { errors: [ { status: 429, detail: "Budget exceeded" } ] },
       status: :too_many_requests
+    )
+  end
+
+  def parse_request_body
+    request.body.rewind
+    @parsed_body = JSON.parse(request.body.read)
+  rescue JSON::ParserError
+    render(
+      json: { errors: [ { status: 400, detail: "Request body is not valid JSON" } ] },
+      status: :bad_request
     )
   end
 
@@ -50,13 +65,6 @@ class ProxyController < ApplicationController
 
     @current_token.record_usage!(cost)
   rescue StandardError => e
-    Rails.logger.error("Failed to record budget usage: #{e.class}: #{e.message}")
-  end
-
-  def proxy_params
-    request.body.rewind
-    JSON.parse(request.body.read)
-  rescue JSON::ParseError
-    {}
+    Rails.logger.error("Failed to record budget usage: #{e.class}")
   end
 end

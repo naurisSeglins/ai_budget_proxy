@@ -6,6 +6,16 @@ class OpenAiClient
   OPEN_TIMEOUT_SECONDS = 5   # TCP + SSL handshake; fail fast if OpenAI is unreachable
   READ_TIMEOUT_SECONDS = 30  # response body; gpt-4o-mini typically responds in 1-3s
 
+  # Shared, thread-safe persistent connection. Reuses TCP/TLS across requests
+  # so we don't pay the handshake cost on every call. Per-request headers
+  # (including the caller's Authorization) are passed to .post, not configured
+  # on the connection — the connection itself is credential-agnostic.
+  CONNECTION = Faraday.new(
+    request: { open_timeout: OPEN_TIMEOUT_SECONDS, timeout: READ_TIMEOUT_SECONDS }
+  ) do |conn|
+    conn.adapter :net_http_persistent
+  end
+
   def initialize(api_key:)
     raise MissingApiKeyError, "OpenAI API key is not configured" if api_key.blank?
 
@@ -13,7 +23,7 @@ class OpenAiClient
   end
 
   def chat_completion(payload)
-    response = connection.post(ENDPOINT, payload.to_json, request_headers)
+    response = CONNECTION.post(ENDPOINT, payload.to_json, request_headers)
     unless response.success?
       Rails.logger.error("OpenAI returned #{response.status}")
       raise Error, "OpenAI returned #{response.status}"
@@ -26,10 +36,6 @@ class OpenAiClient
   end
 
   private
-
-  def connection
-    @connection ||= Faraday.new(request: { open_timeout: OPEN_TIMEOUT_SECONDS, timeout: READ_TIMEOUT_SECONDS })
-  end
 
   def request_headers
     {

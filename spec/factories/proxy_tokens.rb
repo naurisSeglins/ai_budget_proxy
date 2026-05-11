@@ -1,7 +1,7 @@
 FactoryBot.define do
   factory :proxy_token do
     sequence(:email) { |n| "user#{n}@example.com" }
-    token { SecureRandom.hex(32) }
+    token { SecureRandom.urlsafe_base64(32) }
     label { nil }
     limit_millicents { 1_000_000 }  # $10
     usage_millicents { 0 }

@@ -81,12 +81,12 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  #
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # DNS rebinding protection — reject requests whose Host header is not in this
+  # list. Comma-separated ALLOWED_HOSTS env var lets a custom domain be added
+  # without a code change.
+  config.hosts = ENV.fetch("ALLOWED_HOSTS", "ai-budget-proxy.fly.dev").split(",").map(&:strip)
+
+  # Skip the check for Fly's internal healthchecks (they hit the machine's
+  # private IP, not the public hostname).
+  config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 end

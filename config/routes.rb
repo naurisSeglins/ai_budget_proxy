@@ -1,9 +1,10 @@
 Rails.application.routes.draw do
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
-  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  # Can be used by load balancers and uptime monitors to verify that the app is live.
-  get "up" => "rails/health#show", as: :rails_health_check
+  # Health endpoint for Fly + UptimeRobot. Verifies the app booted AND the DB
+  # is reachable; returns 503 if the DB is down so the load balancer can route
+  # away from this instance.
+  get "up" => "health#show", as: :rails_health_check
 
   post "proxy", to: "proxy#create"
   post "tokens", to: "tokens#create"

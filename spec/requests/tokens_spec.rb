@@ -192,6 +192,14 @@ RSpec.describe TokensController, type: :request do
         expect(response).to have_http_status(:ok)
         expect(response_json).to eq([])
       end
+
+      it "caps the response at 100 tokens" do
+        101.times { create(:proxy_token, email: "many@example.com") }
+
+        get "/tokens", params: { email: "many@example.com" }
+
+        expect(response_json.length).to eq(100)
+      end
     end
 
     context "when email is missing" do

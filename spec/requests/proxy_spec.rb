@@ -222,6 +222,41 @@ RSpec.describe ProxyController, type: :request do
       end
     end
 
+    context "when the request body is malformed JSON" do
+      let!(:proxy_token) { create(:proxy_token) }
+
+      it "returns 400 with a clear error and does not forward to OpenAI" do
+        post "/proxy",
+          headers: headers.merge("Content-Type" => "application/json"),
+          params: "not json"
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response_json).to eq(
+          errors: [ { status: 400, detail: "Request body is not valid JSON" } ]
+        )
+        expect(WebMock).not_to have_requested(:post, openai_endpoint)
+      end
+    end
+
+    context "when usage was consumed in the DB after the token was loaded for auth" do
+      let!(:proxy_token) { create(:proxy_token, limit_millicents: 1_000_000, usage_millicents: 0) }
+
+      it "uses fresh DB state and returns 429 (no stale-read race)" do
+        # Simulate a concurrent request having debited the budget after this
+        # request's @current_token was loaded by authenticate_proxy_caller but
+        # before enforce_budget ran. The fix must read fresh data from the DB.
+        allow_any_instance_of(ProxyController).to receive(:enforce_budget).and_wrap_original do |original, *args|
+          ProxyToken.where(id: proxy_token.id).update_all(usage_millicents: 1_000_000)
+          original.call(*args)
+        end
+
+        make_request
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(WebMock).not_to have_requested(:post, openai_endpoint)
+      end
+    end
+
     context "when the token budget is one cent under the limit" do
       let!(:proxy_token) { create(:proxy_token, limit_millicents: 1_000_000, usage_millicents: 999_999) }
 
