@@ -100,7 +100,6 @@ Exceeding either returns `429` with a `Retry-After` header.
 ## Known limitations
 
 - **Non-streaming only.** SSE/streaming responses are not supported yet.
-- **`gpt-4o-mini` pricing only.** Other models are billed at a conservative fallback rate.
 
 ---
 
