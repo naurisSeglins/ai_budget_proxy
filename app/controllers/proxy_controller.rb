@@ -54,6 +54,9 @@ class ProxyController < ApplicationController
   end
 
   def proxy_params
-    params.except(:controller, :action, :proxy).permit!.to_h
+    request.body.rewind
+    JSON.parse(request.body.read)
+  rescue JSON::ParseError
+    {}
   end
 end
