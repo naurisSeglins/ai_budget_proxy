@@ -84,10 +84,10 @@ Tokens are managed from the Rails console or via the `POST /tokens` endpoint.
 
 ```ruby
 token = ProxyToken.create!(
-  label:       "my-app",
-  email:       "owner@example.com",
-  token:       SecureRandom.hex(32),
-  limit_millicents: 1_000_000  # $10.00
+  label:            "my-app",
+  email:            "owner@example.com",
+  token:            SecureRandom.hex(32),
+  limit_millicents: 10 * 100_000  # replace 10 with the dollar cap you want
 )
 puts token.token   # share this value with your caller
 ```
@@ -133,15 +133,15 @@ The response body is the OpenAI chat completion JSON, unchanged. On budget exhau
 
 **Check spend:**
 
-```ruby
-t = ProxyToken.find_by(label: "my-app")
-puts "used: $#{t.usage_millicents / 100_000.0} / limit: $#{t.limit_millicents / 100_000.0}"
+```sh
+curl -s "https://ai-budget-proxy.fly.dev/tokens?email=owner@example.com" | jq
+# returns limit, usage, and remaining in dollars
 ```
 
 **Raise the limit:**
 
 ```ruby
-ProxyToken.find_by(label: "my-app").update!(limit_millicents: 2_000_000)  # $20
+ProxyToken.find_by(label: "my-app").update!(limit_millicents: 20 * 100_000)  # replace 20 with the new dollar cap
 ```
 
 **Reset usage at the start of a billing period:**
@@ -222,7 +222,7 @@ fly ssh console -C "/rails/bin/rails db:migrate"
 
 # 3. Create the first token
 fly ssh console --pty -C "/rails/bin/rails runner \"
-  t = ProxyToken.create!(label: 'first', email: 'you@example.com', token: SecureRandom.hex(32), limit_millicents: 1_000_000)
+  t = ProxyToken.create!(label: 'first', email: 'you@example.com', token: SecureRandom.hex(32), limit_millicents: 10 * 100_000)
   puts t.token
 \""
 

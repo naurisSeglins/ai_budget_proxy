@@ -116,6 +116,31 @@ RSpec.describe OpenAiClient do
         expect { client.chat_completion(payload) }.to raise_error(OpenAiClient::Error)
       end
     end
+
+    context "when a Faraday::ConnectionFailed is raised (open_timeout fired during TCP/SSL handshake)" do
+      before do
+        stub_request(:post, endpoint).to_raise(Faraday::ConnectionFailed.new("execution expired"))
+      end
+
+      it "raises OpenAiClient::Error" do
+        expect { client.chat_completion(payload) }.to raise_error(OpenAiClient::Error)
+      end
+
+      it "error message contains only the exception class, not the connection error detail" do
+        expect { client.chat_completion(payload) }
+          .to raise_error(OpenAiClient::Error, "OpenAI request failed: Faraday::ConnectionFailed")
+      end
+    end
+  end
+
+  describe "timeout configuration" do
+    it "uses a short open timeout to bound TCP/SSL connection establishment" do
+      expect(described_class::OPEN_TIMEOUT_SECONDS).to eq(5)
+    end
+
+    it "uses a longer read timeout to allow time for response bodies" do
+      expect(described_class::READ_TIMEOUT_SECONDS).to eq(30)
+    end
   end
 
   describe "API key resolution" do

@@ -3,7 +3,8 @@ class OpenAiClient
   MissingApiKeyError = Class.new(Error)
 
   ENDPOINT = "https://api.openai.com/v1/chat/completions".freeze
-  TIMEOUT_SECONDS = 30
+  OPEN_TIMEOUT_SECONDS = 5   # TCP + SSL handshake; fail fast if OpenAI is unreachable
+  READ_TIMEOUT_SECONDS = 30  # response body; gpt-4o-mini typically responds in 1-3s
 
   def initialize(api_key:)
     raise MissingApiKeyError, "OpenAI API key is not configured" if api_key.blank?
@@ -27,7 +28,7 @@ class OpenAiClient
   private
 
   def connection
-    @connection ||= Faraday.new(request: { timeout: TIMEOUT_SECONDS })
+    @connection ||= Faraday.new(request: { open_timeout: OPEN_TIMEOUT_SECONDS, timeout: READ_TIMEOUT_SECONDS })
   end
 
   def request_headers
