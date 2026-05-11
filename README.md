@@ -34,16 +34,18 @@ Production endpoint: `https://ai-budget-proxy.fly.dev`
 
 ## Latency
 
-> Run `script/measure_latency` against the deployed proxy and paste the output here.
->
-> ```sh
-> PROXY_URL=https://ai-budget-proxy.fly.dev \
-> PROXY_TOKEN=<token> \
-> OPENAI_KEY=sk-... \
-> ruby script/measure_latency
-> ```
->
-> Report format: proxy overhead p50 / p95, date, model, region, payload size.
+Measured 2026-05-11 against `https://ai-budget-proxy.fly.dev` (Fly.io `ams`), `gpt-4o-mini`, single short message, 1 worker, 194 successful requests:
+
+```
+Total round-trip (proxy + OpenAI)
+  p50  : 919 ms
+  p95  : 1563 ms
+  min  : 736 ms
+  max  : 4350 ms
+  mean : 1014 ms
+```
+
+The `openai-processing-ms` header is not present in OpenAI responses, so proxy overhead cannot be isolated from model latency. The bulk of round-trip time is OpenAI inference.
 
 ---
 
