@@ -37,6 +37,9 @@ gem "image_processing", "~> 1.2"
 
 # HTTP client for upstream API calls (OpenAI, etc.)
 gem "faraday"
+# Persistent HTTP/TLS connection pool for Faraday — reuses connections across
+# requests so we don't pay the ~50-100ms TLS handshake cost on every call.
+gem "faraday-net_http_persistent"
 
 # Throttle abusive requests at the Rack layer
 gem "rack-attack", "~> 6.8"

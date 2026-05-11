@@ -9,7 +9,7 @@ class TokensController < PublicController
     end
 
     proxy_token = ProxyToken.new(
-      token: SecureRandom.hex(32),
+      token: SecureRandom.urlsafe_base64(32),
       email: params[:email].presence,
       label: params[:label].presence,
       limit_millicents: limit_millicents
