@@ -17,19 +17,19 @@ Production endpoint: `https://ai-budget-proxy.fly.dev`
 
 ## Latency
 
-Measured 2026-05-11, `gpt-4o-mini`, Fly.io `ams`, 194 requests:
+Measured 2026-05-12, `gpt-4o-mini`, Fly.io `ams`, 200 requests:
 
 ```
-p50  : 919 ms
-p95  : 1563 ms
-mean : 1014 ms
+p50  : 951 ms
+p95  : 1678 ms
+mean : 1108 ms
 ```
 
 ---
 
-## Getting started
+## Quick start
 
-**1. Create a token**
+**1. Get a token**
 
 ```sh
 curl -s -X POST https://ai-budget-proxy.fly.dev/tokens \
@@ -38,19 +38,9 @@ curl -s -X POST https://ai-budget-proxy.fly.dev/tokens \
   | jq
 ```
 
-`limit` is your spend cap in dollars. Returns `{ "token": "..." }` — save that value.
+`limit` is your spend cap in dollars. Returns `{ "token": "..." }` — save it.
 
-**2. Check your spend at any time**
-
-```sh
-curl -s "https://ai-budget-proxy.fly.dev/tokens?email=you@example.com" | jq
-```
-
-Returns `limit`, `usage`, and `remaining` in dollars for every token on that email.
-
----
-
-## Making a request
+**2. Send a request**
 
 Two headers are required on every call to `POST /proxy`:
 
@@ -68,17 +58,23 @@ curl -s -X POST https://ai-budget-proxy.fly.dev/proxy \
   | jq
 ```
 
-The response is the OpenAI chat completion JSON, unchanged.
-
-When your budget is exhausted the proxy returns `429` before making any upstream call:
+The response is the OpenAI chat completion JSON, unchanged. When your budget is exhausted the proxy returns `429` before making any upstream call:
 
 ```json
 { "errors": [{ "status": 429, "detail": "Budget exceeded" }] }
 ```
 
+**3. Check your spend**
+
+```sh
+curl -s "https://ai-budget-proxy.fly.dev/tokens?email=you@example.com" | jq
+```
+
+Returns `limit`, `usage`, and `remaining` in dollars for every token on that email.
+
 ---
 
-## Security
+## Security 
 
 - Your OpenAI key is never stored. It is held in memory for the duration of the request and forwarded to OpenAI — it is never written to the database or any log.
 - All traffic is HTTPS. Plain HTTP is refused.
