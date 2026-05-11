@@ -59,5 +59,18 @@ RSpec.describe ProxyToken, type: :model do
       token.record_usage!(50)
       expect(token.reload.usage_millicents).to eq(50)
     end
+
+    it "syncs the in-memory value to the database (no stale +=)" do
+      token = create(:proxy_token, limit_millicents: 1_000_000, usage_millicents: 0)
+
+      # Simulate a concurrent debit on a different process/thread.
+      ProxyToken.where(id: token.id).update_all(usage_millicents: 100)
+
+      token.record_usage!(50)
+
+      # In-memory value must reflect what's actually in the DB (150),
+      # not the stale-base `+=` arithmetic (50).
+      expect(token.usage_millicents).to eq(150)
+    end
   end
 end

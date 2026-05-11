@@ -31,7 +31,7 @@ class TokensController < PublicController
       errors: [ { status: 422, detail: "Email can't be blank", source: { pointer: "/email" } } ]
     }, status: :unprocessable_entity unless params[:email].present?
 
-    tokens = ProxyToken.where(email: params[:email]).order(created_at: :desc)
+    tokens = ProxyToken.where(email: params[:email]).order(created_at: :desc).limit(100)
 
     render json: tokens.map { |t|
       {

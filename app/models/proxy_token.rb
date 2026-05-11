@@ -14,7 +14,6 @@ class ProxyToken < ApplicationRecord
 
   def record_usage!(millicents)
     self.class.update_counters(id, usage_millicents: millicents)
-    self.usage_millicents += millicents
-    self
+    reload
   end
 end
