@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for ai-budget-proxy on 2026-05-06T18:46:38Z
+# fly.toml app configuration file generated for ai-budget-proxy on 2026-05-11T07:22:21Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -13,6 +13,7 @@ console_command = '/rails/bin/rails console'
 # default. Containers run as the non-root 'rails' user (UID 1000), which cannot
 # bind to ports < 1024 on Linux. Tell Thrust to listen on 8080 to match Fly's
 # expected internal_port. Thrust still proxies to Rails on the default PORT (3000).
+
 [env]
   HTTP_PORT = "8080"
 
@@ -29,7 +30,8 @@ console_command = '/rails/bin/rails console'
   processes = ['app']
 
 [[vm]]
-  memory = '1gb'
+  memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 256
+  memory_mb = 512
+  size = 'shared-cpu-1x'
