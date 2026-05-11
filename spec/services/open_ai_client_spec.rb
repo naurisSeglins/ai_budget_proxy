@@ -58,12 +58,88 @@ RSpec.describe OpenAiClient do
     context "when OpenAI returns a non-200 response" do
       before do
         stub_request(:post, endpoint)
-          .to_return(status: 500, body: { error: "upstream boom" }.to_json)
+          .to_return(status: 401, body: { error: { message: "Incorrect API key provided: sk-test..." } }.to_json)
       end
 
       it "raises OpenAiClient::Error" do
         expect { client.chat_completion(payload) }.to raise_error(OpenAiClient::Error)
       end
+
+      it "error message contains only the status code, not the response body" do
+        expect { client.chat_completion(payload) }
+          .to raise_error(OpenAiClient::Error, "OpenAI returned 401")
+      end
+
+      it "logs only the status code at error level, not the response body" do
+        allow(Rails.logger).to receive(:error)
+        begin
+          client.chat_completion(payload)
+        rescue OpenAiClient::Error
+          nil
+        end
+        expect(Rails.logger).to have_received(:error).with("OpenAI returned 401")
+      end
+    end
+
+    context "when a Faraday::SSLError is raised" do
+      before do
+        stub_request(:post, endpoint)
+          .to_raise(Faraday::SSLError.new("SSL_read: unexpected eof while reading"))
+      end
+
+      it "raises OpenAiClient::Error" do
+        expect { client.chat_completion(payload) }.to raise_error(OpenAiClient::Error)
+      end
+
+      it "error message contains only the exception class, not the SSL error detail" do
+        expect { client.chat_completion(payload) }
+          .to raise_error(OpenAiClient::Error, "OpenAI request failed: Faraday::SSLError")
+      end
+
+      it "logs only the exception class at error level, not the error detail" do
+        allow(Rails.logger).to receive(:error)
+        begin
+          client.chat_completion(payload)
+        rescue OpenAiClient::Error
+          nil
+        end
+        expect(Rails.logger).to have_received(:error).with("OpenAI network error: Faraday::SSLError")
+      end
+    end
+
+    context "when a Faraday::TimeoutError is raised" do
+      before do
+        stub_request(:post, endpoint).to_raise(Faraday::TimeoutError)
+      end
+
+      it "raises OpenAiClient::Error" do
+        expect { client.chat_completion(payload) }.to raise_error(OpenAiClient::Error)
+      end
+    end
+
+    context "when a Faraday::ConnectionFailed is raised (open_timeout fired during TCP/SSL handshake)" do
+      before do
+        stub_request(:post, endpoint).to_raise(Faraday::ConnectionFailed.new("execution expired"))
+      end
+
+      it "raises OpenAiClient::Error" do
+        expect { client.chat_completion(payload) }.to raise_error(OpenAiClient::Error)
+      end
+
+      it "error message contains only the exception class, not the connection error detail" do
+        expect { client.chat_completion(payload) }
+          .to raise_error(OpenAiClient::Error, "OpenAI request failed: Faraday::ConnectionFailed")
+      end
+    end
+  end
+
+  describe "timeout configuration" do
+    it "uses a short open timeout to bound TCP/SSL connection establishment" do
+      expect(described_class::OPEN_TIMEOUT_SECONDS).to eq(5)
+    end
+
+    it "uses a longer read timeout to allow time for response bodies" do
+      expect(described_class::READ_TIMEOUT_SECONDS).to eq(30)
     end
   end
 
