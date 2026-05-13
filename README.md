@@ -101,4 +101,4 @@ Exceeding either returns `429` with a `Retry-After` header.
 
 ## Roadmap
 
-Streaming support, soft-cap alerts, email confirmation on token creation, and a React dashboard are in progress.
+Planned: streaming support, soft-cap alerts, and a React dashboard with account registration.
