@@ -1,8 +1,10 @@
 # ai_budget proxy
 
-A stateless HTTP proxy that sits between your app and OpenAI and enforces a hard spend cap. When the cap is hit, requests stop — no runaway bills from a loop gone wrong or a forgotten test script.
+An HTTP proxy that sits between your app and OpenAI and enforces a hard spend cap per token. When the cap is hit, requests stop — no runaway bills from a loop gone wrong or a forgotten test script.
 
-Your OpenAI key never touches the proxy server. You supply it on each request and it is forwarded directly to OpenAI.
+Each token has its own isolated budget. One agent or user hitting their cap does not affect any other token on the same account.
+
+Your OpenAI key never touches the proxy's storage. You supply it on each request and it is forwarded directly to OpenAI.
 
 ---
 
@@ -74,9 +76,12 @@ Returns `limit`, `usage`, and `remaining` in dollars for every token on that ema
 
 ---
 
-## Security 
+## Security
 
-- Your OpenAI key is never stored. It is held in memory for the duration of the request and forwarded to OpenAI — it is never written to the database or any log.
+**Your OpenAI key is never stored.** It arrives in the `X-Provider-Authorization` header, lives in memory for the ~50ms it takes to forward the request to OpenAI, and is gone. It is never written to the database, any log, or any file.
+
+This is intentional. The alternative — storing keys server-side in a vault or environment variable — means a single server breach exposes every key from every user. The per-request model means there is nothing to steal at rest.
+
 - All traffic is HTTPS. Plain HTTP is refused.
 - Request body fields (`messages`, `prompt`, `input`, `content`) are masked in logs. Auth header values are redacted.
 
