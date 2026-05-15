@@ -1,0 +1,35 @@
+# ai_budget
+
+> A hosted HTTP proxy that enforces hard dollar caps on OpenAI API usage. Point your app at the proxy instead of `api.openai.com`; when a token hits its cap, the proxy refuses the request before it reaches OpenAI.
+
+ai_budget solves a specific operational problem: a single bug, runaway loop, or abusive user can drain your OpenAI account in hours. ai_budget is a kill-switch that lives in front of the OpenAI API. Each proxy token has its own dollar limit and its own running usage total. When the limit is hit, requests to that token return `429` before any upstream call is made. Other tokens on the same account are unaffected — there is no shared budget pool.
+
+The proxy never stores your OpenAI API key. The caller supplies the key on every request in a dedicated header; the proxy holds it in memory for the duration of the upstream call and forwards it to OpenAI. The proxy's own bearer token authenticates the caller against the proxy itself and controls which budget is debited.
+
+Use cases: per-end-user budgets in a multi-tenant chatbot, per-environment limits in CI, per-agent limits when running autonomous loops, a global cap on a side project so a forgotten cron job cannot run up a four-figure bill.
+
+## Endpoints
+
+- [POST /tokens](https://ai-budget-proxy.fly.dev/tokens): create a proxy token with an email, a dollar limit, and an optional label
+- [GET /tokens](https://ai-budget-proxy.fly.dev/tokens): list tokens for a given email with their current limit, usage, and remaining balance in dollars
+- [POST /proxy](https://ai-budget-proxy.fly.dev/proxy): forward an OpenAI chat completion request. Requires `Authorization: Bearer <proxy-token>` and `X-Provider-Authorization: Bearer <openai-key>`. Returns the OpenAI response unchanged when the budget allows, or `429` when the cap is hit
+- [GET /up](https://ai-budget-proxy.fly.dev/up): health check (200 when the proxy and database are reachable)
+
+## Links
+
+- [Source code (GitHub)](https://github.com/naurisSeglins/ai_budget_proxy): public Rails app, MIT licensed
+- [README](https://github.com/naurisSeglins/ai_budget_proxy#readme): quick start, security model, rate limits, roadmap
+- [Status page](https://stats.uptimerobot.com/iksO5GXjsP): public uptime monitoring, 1-minute interval
+- [Production endpoint](https://ai-budget-proxy.fly.dev): live proxy URL
+
+## Design
+
+- **Per-token budgets, not per-account.** Each token has its own dollar cap and usage counter. Tokens are isolated — one token cannot affect another's budget
+- **No key storage.** The caller's OpenAI key is passed per request on `X-Provider-Authorization` and held in memory only. A breach of the proxy server exposes no upstream credentials
+- **Fail-closed.** Missing budget configuration, an unpriced model, or an unreachable database all refuse the request rather than letting it through
+- **Accurate billing.** Costs are tracked in milli-cents (1/100,000 of a dollar) to avoid rounding a fraction-of-a-cent gpt-4o-mini request up to a whole cent. The cost table covers nine OpenAI models with a conservative fallback rate for anything not listed
+- **Rate limited.** 60 requests per minute per token, 120 per minute per IP by default. Configurable via environment variables
+
+## Keywords
+
+OpenAI proxy, OpenAI budget cap, OpenAI spend limit, hard cap, AI cost control, per-user budget, kill switch, rate limit OpenAI, OpenAI API cost monitoring, runaway bill protection, chatbot cost isolation, multi-tenant AI budget
